@@ -1,3 +1,4 @@
+
 # NexPharmAI
 
 **AI-Powered Pharmaceutical Smart Manufacturing, Production Scheduling, Predictive Maintenance and Factory Optimization Platform**
@@ -160,3 +161,6 @@ Navigate to `http://localhost:3000`.
 ```bash
 docker compose up --build
 ```
+=======
+# NexPharmAI-2.0
+AI-Powered Pharmaceutical Smart Manufacturing and Factory Optimization Platform
