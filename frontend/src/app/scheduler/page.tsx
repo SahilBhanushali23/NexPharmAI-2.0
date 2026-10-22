@@ -315,11 +315,16 @@ export default function SchedulerPage() {
                       </div>
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
-                      Trigger: <strong style={{ color: 'var(--text-primary)' }}>{rev.trigger_reason}</strong>
+                      Trigger: <strong style={{ color: 'var(--text-primary)' }}>{rev.reason}</strong>
                     </div>
-                    {rev.reassigned_batches_count !== undefined && (
+                    {rev.changes_summary?.degraded_machine && (
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                        Reassigned batches: {rev.reassigned_batches_count}
+                        Triggering machine: <strong style={{ color: 'var(--text-primary)' }}>{rev.changes_summary.degraded_machine}</strong>
+                      </div>
+                    )}
+                    {rev.changes_summary?.reassigned_batches_count !== undefined && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                        Reassigned batches: {rev.changes_summary.reassigned_batches_count}
                       </div>
                     )}
                   </div>

@@ -65,3 +65,7 @@ desktop.ini
 *.pkl
 *.joblib
 !ml/models/.gitkeep
+
+frontend/tsconfig.tsbuildinfo
+
+backend/nexpharm.db

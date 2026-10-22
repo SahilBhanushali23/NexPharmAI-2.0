@@ -38,6 +38,7 @@ export default function ForecastingPage() {
   async function handleGenerateForecast() {
     if (!selectedProductId) return;
     setLoading(true);
+    setForecast(null);
     try {
       const res = await api.generateForecast({
         product_id: selectedProductId,
@@ -50,6 +51,23 @@ export default function ForecastingPage() {
       setLoading(false);
     }
   }
+
+  const forecastItems = forecast?.forecasts || [];
+  const chartItems = forecastItems.filter((_: any, index: number) => {
+    const sampleEvery = Math.max(1, Math.ceil(forecastItems.length / 14));
+    return index % sampleEvery === 0;
+  }).slice(0, 14);
+  const dailyAverage = forecastItems.length > 0
+    ? forecastItems.reduce((sum: number, item: any) => sum + Number(item.predicted_demand || 0), 0) / forecastItems.length
+    : 0;
+  const averageLowerBound = forecastItems.length > 0
+    ? forecastItems.reduce((sum: number, item: any) => sum + Number(item.lower_bound || 0), 0) / forecastItems.length
+    : 0;
+  const averageUpperBound = forecastItems.length > 0
+    ? forecastItems.reduce((sum: number, item: any) => sum + Number(item.upper_bound || 0), 0) / forecastItems.length
+    : 0;
+  const maximumDemand = Math.max(...forecastItems.map((item: any) => Number(item.predicted_demand || 0)), 1);
+  const selectedProduct = products.find((product) => product.id === selectedProductId);
 
   return (
     <div>
@@ -86,12 +104,15 @@ export default function ForecastingPage() {
             </label>
             <select
               value={selectedProductId}
-              onChange={(e) => setSelectedProductId(e.target.value)}
+              onChange={(e) => {
+                setSelectedProductId(e.target.value);
+                setForecast(null);
+              }}
               className="input-field"
             >
               {products.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} ({p.sku}) — {p.dosage_form}
+                  {p.product_name} — SKU: {p.product_code} — Type: {p.description || 'Not specified'}
                 </option>
               ))}
             </select>
@@ -103,7 +124,10 @@ export default function ForecastingPage() {
             </label>
             <select
               value={horizonDays}
-              onChange={(e) => setHorizonDays(Number(e.target.value))}
+              onChange={(e) => {
+                setHorizonDays(Number(e.target.value));
+                setForecast(null);
+              }}
               className="input-field"
             >
               <option value={7}>7 Days (Short-term)</option>
@@ -133,29 +157,31 @@ export default function ForecastingPage() {
             <div>
               <div className="card-title">Forecast Projections: {forecast.product_name || 'Pharmaceutical SKU'}</div>
               <div className="card-subtitle">
-                Horizon: {forecast.horizon_days} Days • Total Projected Demand: {forecast.total_predicted_demand?.toLocaleString()} units
+                Horizon: {forecast.horizon_days} Days • Total Projected Demand: {Number(forecast.total_projected_demand || 0).toLocaleString()} units
               </div>
             </div>
-            <span className="badge badge-warning">{forecast.integrity_note || 'Historical Dataset Required for Retraining'}</span>
+            <span className="badge badge-warning">{forecast.training_data_status || 'Historical sales dataset required for model training'}</span>
           </div>
           <div className="card-body">
             <div className="grid-3" style={{ marginBottom: '1.5rem' }}>
               <div className="metric-card">
                 <div className="metric-label">Projected Daily Demand Mean</div>
                 <div className="metric-value">
-                  {forecast.daily_average?.toFixed(0) || '3,450'}<span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}> units/day</span>
+                  {dailyAverage.toFixed(0)}<span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}> units/day</span>
                 </div>
               </div>
               <div className="metric-card">
-                <div className="metric-label">Model Confidence Interval</div>
+                <div className="metric-label">Projected Daily Range</div>
                 <div className="metric-value" style={{ color: 'var(--primary)' }}>
-                  {forecast.confidence_interval || '± 8.5%'}
+                  {averageLowerBound.toFixed(0)}–{averageUpperBound.toFixed(0)}<span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}> units/day</span>
                 </div>
               </div>
               <div className="metric-card">
                 <div className="metric-label">Recommended Production Batches</div>
                 <div className="metric-value" style={{ color: 'var(--secondary)' }}>
-                  {Math.ceil((forecast.total_predicted_demand || 100000) / 25000)} Batches
+                  {selectedProduct?.batch_size
+                    ? `${Math.ceil(Number(forecast.total_projected_demand || 0) / selectedProduct.batch_size)} Batches`
+                    : 'Batch size unavailable'}
                 </div>
               </div>
             </div>
@@ -163,23 +189,29 @@ export default function ForecastingPage() {
             {/* Daily projections breakdown preview */}
             <div style={{ background: 'var(--bg-tertiary)', padding: '1.25rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
               <div style={{ fontWeight: 600, marginBottom: '0.75rem', fontSize: '0.9rem' }}>
-                Projected Trajectory Sample
+                Projected Daily Demand
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', height: '140px', padding: '0.5rem 0' }}>
-                {[65, 72, 68, 85, 92, 88, 95, 78, 82, 89, 94, 91, 86, 99].map((val, idx) => (
-                  <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
+              {chartItems.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--text-muted)' }}>
+                  No forecast points were returned for this SKU.
+                </div>
+              ) : (
+                <div aria-label="Forecasted daily demand chart" style={{ display: 'flex', gap: '0.5rem', alignItems: 'stretch', height: '180px', padding: '0.5rem 0' }}>
+                  {chartItems.map((item: any, idx: number) => (
+                  <div key={item.date} title={`${item.date}: ${Number(item.predicted_demand).toLocaleString()} units`} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', gap: '0.35rem' }}>
                     <div
                       style={{
                         width: '100%',
-                        height: `${val}%`,
+                        height: `${Math.max(4, Number(item.predicted_demand || 0) / maximumDemand * 100)}%`,
                         background: 'linear-gradient(to top, var(--secondary), var(--primary))',
                         borderRadius: '3px',
                       }}
                     ></div>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>d{idx + 1}</span>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{item.date?.slice(5)}</span>
                   </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

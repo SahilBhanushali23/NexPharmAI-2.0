@@ -35,17 +35,26 @@ export default function AssistantPage() {
     {
       id: 'welcome',
       sender: 'assistant',
-      text: 'Greetings! I am the NexPharmAI Autonomous Decision Assistant. I am connected directly to the live manufacturing database, OR-Tools CP-SAT scheduler, telemetry ingestion streams, and machine learning models. How can I assist factory operations today?',
-      timestamp: new Date().toLocaleTimeString(),
+      text: 'I can answer operational questions using current machine, alert, schedule, inventory, and OEE records from the manufacturing database. What would you like to check?',
+      timestamp: '',
     },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    container?.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    setMessages((prev) => prev.map((message) =>
+      message.id === 'welcome' && !message.timestamp
+        ? { ...message, timestamp: new Date().toLocaleTimeString() }
+        : message
+    ));
+  }, []);
 
   async function handleSend(queryText?: string) {
     const q = (queryText || input).trim();
@@ -98,7 +107,7 @@ export default function AssistantPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(6, 182, 212, 0.1)', border: '1px solid rgba(6, 182, 212, 0.3)', padding: '0.5rem 0.85rem', borderRadius: 'var(--radius-sm)' }}>
           <Sparkles size={16} style={{ color: 'var(--primary)' }} />
           <span style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 600 }}>
-            Live Context RAG Active
+            Live Database Queries
           </span>
         </div>
       </div>
@@ -111,7 +120,13 @@ export default function AssistantPage() {
             onClick={() => handleSend(prompt)}
             disabled={loading}
             className="btn btn-outline btn-sm"
-            style={{ fontSize: '0.75rem', borderRadius: 'var(--radius-full)', background: 'var(--bg-card)' }}
+            style={{
+              fontSize: '0.75rem',
+              borderRadius: 'var(--radius-full)',
+              background: 'var(--bg-card)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border-accent)',
+            }}
           >
             {prompt}
           </button>
@@ -119,9 +134,9 @@ export default function AssistantPage() {
       </div>
 
       {/* Chat Container */}
-      <div className="card" style={{ height: '580px', display: 'flex', flexDirection: 'column' }}>
+      <div className="card" style={{ height: '580px', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {/* Messages Stream */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div ref={messagesContainerRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {messages.map((m) => {
             const isUser = m.sender === 'user';
             return (
@@ -164,6 +179,11 @@ export default function AssistantPage() {
                     lineHeight: 1.5,
                   }}
                 >
+                  {isUser && (
+                    <div style={{ fontSize: '0.68rem', fontWeight: 700, marginBottom: '0.25rem', opacity: 0.8 }}>
+                      YOU ASKED
+                    </div>
+                  )}
                   <div style={{ whiteSpace: 'pre-wrap' }}>{m.text}</div>
 
                   {m.context && Object.keys(m.context).length > 0 && (
@@ -175,9 +195,11 @@ export default function AssistantPage() {
                     </div>
                   )}
 
-                  <div style={{ textAlign: 'right', fontSize: '0.7rem', marginTop: '0.35rem', opacity: 0.6 }}>
-                    {m.timestamp}
-                  </div>
+                  {m.timestamp && (
+                    <div style={{ textAlign: 'right', fontSize: '0.7rem', marginTop: '0.35rem', opacity: 0.6 }}>
+                      {m.timestamp}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -189,7 +211,6 @@ export default function AssistantPage() {
               <span>Analyzing telemetry & database records...</span>
             </div>
           )}
-          <div ref={messagesEndRef} />
         </div>
 
         {/* Input Bar */}

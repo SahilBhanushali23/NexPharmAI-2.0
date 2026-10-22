@@ -61,11 +61,11 @@ export default function MachineDetailPage() {
         setReadings(reads);
         if (reads.length > 0) {
           const latest = reads[0];
-          setAirTemp(latest.air_temperature_k || 300.0);
-          setProcTemp(latest.process_temperature_k || 310.0);
-          setSpeed(latest.rotational_speed_rpm || 1500);
-          setTorque(latest.torque_nm || 42.0);
-          setWear(latest.tool_wear_min || 120);
+          setAirTemp(latest.air_temperature ?? 300.0);
+          setProcTemp(latest.process_temperature ?? 310.0);
+          setSpeed(latest.rotational_speed ?? 1500);
+          setTorque(latest.torque ?? 42.0);
+          setWear(latest.tool_wear ?? 120);
         }
       }
     } catch (err) {
@@ -107,11 +107,12 @@ export default function MachineDetailPage() {
     try {
       await api.ingestReading({
         machine_id: machineId,
-        air_temperature_k: Number(airTemp),
-        process_temperature_k: Number(procTemp),
-        rotational_speed_rpm: Number(speed),
-        torque_nm: Number(torque),
-        tool_wear_min: Number(wear),
+        machine_type: machine.machine_type,
+        air_temperature: Number(airTemp),
+        process_temperature: Number(procTemp),
+        rotational_speed: Number(speed),
+        torque: Number(torque),
+        tool_wear: Number(wear),
       });
       await loadMachineData();
       alert('Sensor reading successfully ingested! Predictive maintenance and health models re-evaluated.');
@@ -355,12 +356,12 @@ export default function MachineDetailPage() {
                       <td style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                         {new Date(r.timestamp).toLocaleTimeString()}
                       </td>
-                      <td>{r.air_temperature_k?.toFixed(1)} K</td>
-                      <td>{r.process_temperature_k?.toFixed(1)} K</td>
-                      <td>{r.rotational_speed_rpm} rpm</td>
-                      <td>{r.torque_nm?.toFixed(1)} Nm</td>
-                      <td style={{ color: r.tool_wear_min > 180 ? 'var(--status-critical)' : 'inherit' }}>
-                        {r.tool_wear_min}m
+                      <td>{r.air_temperature?.toFixed(1)} K</td>
+                      <td>{r.process_temperature?.toFixed(1)} K</td>
+                      <td>{r.rotational_speed} rpm</td>
+                      <td>{r.torque?.toFixed(1)} Nm</td>
+                      <td style={{ color: r.tool_wear > 180 ? 'var(--status-critical)' : 'inherit' }}>
+                        {r.tool_wear}m
                       </td>
                     </tr>
                   ))}

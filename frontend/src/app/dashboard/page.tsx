@@ -16,7 +16,8 @@ import {
   Sparkles,
   TrendingUp,
   Zap,
-  ArrowUpRight
+  ArrowUpRight,
+  RefreshCw
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -26,6 +27,8 @@ export default function DashboardPage() {
   const [schedule, setSchedule] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [generatingSchedule, setGeneratingSchedule] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -33,6 +36,7 @@ export default function DashboardPage() {
 
   async function fetchDashboardData() {
     setLoading(true);
+    setLoadError('');
     try {
       const [sumRes, machRes, alertRes, schedRes] = await Promise.allSettled([
         api.getDashboardSummary(),
@@ -41,12 +45,24 @@ export default function DashboardPage() {
         api.getActiveSchedule(),
       ]);
 
+      const failedSources: string[] = [];
       if (sumRes.status === 'fulfilled') setSummary(sumRes.value);
+      else failedSources.push('plant metrics');
       if (machRes.status === 'fulfilled') setMachines(machRes.value || []);
+      else failedSources.push('machine fleet');
       if (alertRes.status === 'fulfilled') setAlerts(alertRes.value || []);
+      else failedSources.push('alerts');
       if (schedRes.status === 'fulfilled') setSchedule(schedRes.value);
+      else failedSources.push('production schedule');
+
+      if (failedSources.length > 0) {
+        setLoadError(`Could not refresh ${failedSources.join(', ')}. Other dashboard data may be current.`);
+      } else {
+        setLastRefreshed(new Date());
+      }
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
+      setLoadError('Dashboard data could not be refreshed. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -65,25 +81,13 @@ export default function DashboardPage() {
   }
 
   const oee = summary?.oee ? {
-    availability: (summary.oee.availability ?? 92.0) / 100,
-    performance: (summary.oee.performance ?? 94.0) / 100,
-    quality_rate: (summary.oee.quality ?? 98.0) / 100,
-    overall_oee: (summary.oee.overall ?? 85.0) / 100,
-  } : (summary?.oee_metrics || {
-    availability: 0.92,
-    performance: 0.94,
-    quality_rate: 0.98,
-    overall_oee: 0.85,
-  });
+    availability: summary.oee.availability / 100,
+    performance: summary.oee.performance / 100,
+    quality_rate: summary.oee.quality / 100,
+    overall_oee: summary.oee.overall / 100,
+  } : null;
 
-  const fleet = summary?.machines || summary?.machine_fleet || {
-    total: machines.length || 6,
-    running: machines.filter((m) => m.status === 'RUNNING').length || 4,
-    warning: machines.filter((m) => m.status === 'WARNING').length || 0,
-    critical: machines.filter((m) => m.status === 'CRITICAL').length || 0,
-    maintenance: machines.filter((m) => m.status === 'MAINTENANCE').length || 0,
-    idle: machines.filter((m) => m.status === 'IDLE').length || 0,
-  };
+  const fleet = summary?.machines || null;
 
   return (
     <div>
@@ -106,14 +110,28 @@ export default function DashboardPage() {
           </button>
           <button
             onClick={fetchDashboardData}
+            disabled={loading}
             className="btn btn-outline"
             style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
           >
-            <Activity size={16} />
-            Refresh Telemetry
+            {loading ? <RefreshCw size={16} className="spin" /> : <Activity size={16} />}
+            {loading ? 'Refreshing...' : 'Refresh Telemetry'}
           </button>
         </div>
       </div>
+
+      <div aria-live="polite" style={{ minHeight: '1.2rem', marginBottom: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+        {loading
+          ? 'Updating plant metrics, fleet, alerts, and schedule...'
+          : lastRefreshed
+          ? `Last refreshed ${lastRefreshed.toLocaleTimeString()}`
+          : ''}
+      </div>
+      {loadError && (
+        <div role="alert" style={{ marginBottom: '1rem', color: 'var(--status-critical)' }}>
+          {loadError}
+        </div>
+      )}
 
       {/* KPI Metric Cards */}
       <div className="grid-4" style={{ marginBottom: '1.5rem' }}>
@@ -123,7 +141,7 @@ export default function DashboardPage() {
           </div>
           <div className="metric-label">Plant Overall OEE</div>
           <div className="metric-value" style={{ color: 'var(--primary)' }}>
-            {(oee.overall_oee * 100).toFixed(1)}%
+            {oee ? `${(oee.overall_oee * 100).toFixed(1)}%` : '—'}
           </div>
           <div style={{ fontSize: '0.8rem', color: 'var(--status-running)', marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
             <ArrowUpRight size={14} /> World-class benchmark target 85%
@@ -136,13 +154,15 @@ export default function DashboardPage() {
           </div>
           <div className="metric-label">Machine Fleet Health</div>
           <div className="metric-value">
-            {fleet.running}/{fleet.total} <span style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>Online</span>
+            {fleet ? <>{fleet.running}/{fleet.total} <span style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>Online</span></> : '—'}
           </div>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-            {fleet.critical > 0 ? (
+            {fleet?.critical > 0 ? (
               <span style={{ color: 'var(--status-critical)' }}>{fleet.critical} Critical degradation</span>
-            ) : (
+            ) : fleet ? (
               'All units within safety limits'
+            ) : (
+              'Waiting for fleet data'
             )}
           </div>
         </div>
@@ -152,11 +172,11 @@ export default function DashboardPage() {
             <AlertTriangle size={22} />
           </div>
           <div className="metric-label">Active Plant Alerts</div>
-          <div className="metric-value" style={{ color: alerts.length > 0 ? 'var(--status-warning)' : 'var(--text-primary)' }}>
-            {alerts.length}
+          <div className="metric-value" style={{ color: (summary?.alerts?.active_total || 0) > 0 ? 'var(--status-warning)' : 'var(--text-primary)' }}>
+            {summary?.alerts?.active_total ?? '—'}
           </div>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-            {alerts.filter((a) => a.severity === 'CRITICAL').length} Critical • {alerts.filter((a) => a.severity === 'WARNING').length} Warnings
+            {summary?.alerts ? `${summary.alerts.critical} Critical • ${alerts.length} recent alerts loaded` : 'Waiting for alert data'}
           </div>
         </div>
 
@@ -189,30 +209,30 @@ export default function DashboardPage() {
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem', fontSize: '0.85rem' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Availability (Uptime vs Planned)</span>
-                  <span style={{ fontWeight: 600 }}>{(oee.availability * 100).toFixed(1)}%</span>
+                  <span style={{ fontWeight: 600 }}>{oee ? `${(oee.availability * 100).toFixed(1)}%` : '—'}</span>
                 </div>
                 <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: `${Math.min(100, oee.availability * 100)}%`, background: 'var(--primary)' }}></div>
+                  <div className="progress-fill" style={{ width: `${Math.min(100, (oee?.availability || 0) * 100)}%`, background: 'var(--primary)' }}></div>
                 </div>
               </div>
 
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem', fontSize: '0.85rem' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Performance (Throughput vs Ideal)</span>
-                  <span style={{ fontWeight: 600 }}>{(oee.performance * 100).toFixed(1)}%</span>
+                  <span style={{ fontWeight: 600 }}>{oee ? `${(oee.performance * 100).toFixed(1)}%` : '—'}</span>
                 </div>
                 <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: `${Math.min(100, oee.performance * 100)}%`, background: 'var(--secondary)' }}></div>
+                  <div className="progress-fill" style={{ width: `${Math.min(100, (oee?.performance || 0) * 100)}%`, background: 'var(--secondary)' }}></div>
                 </div>
               </div>
 
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem', fontSize: '0.85rem' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Quality (Good vs Total Output)</span>
-                  <span style={{ fontWeight: 600 }}>{(oee.quality_rate * 100).toFixed(1)}%</span>
+                  <span style={{ fontWeight: 600 }}>{oee ? `${(oee.quality_rate * 100).toFixed(1)}%` : '—'}</span>
                 </div>
                 <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: `${Math.min(100, oee.quality_rate * 100)}%`, background: 'var(--status-running)' }}></div>
+                  <div className="progress-fill" style={{ width: `${Math.min(100, (oee?.quality_rate || 0) * 100)}%`, background: 'var(--status-running)' }}></div>
                 </div>
               </div>
 

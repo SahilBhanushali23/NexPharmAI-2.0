@@ -16,6 +16,8 @@ export default function AlertsPage() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [severityFilter, setSeverityFilter] = useState('ALL');
+  const [loadError, setLoadError] = useState('');
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
   useEffect(() => {
     loadAlerts();
@@ -23,13 +25,16 @@ export default function AlertsPage() {
 
   async function loadAlerts() {
     setLoading(true);
+    setLoadError('');
     try {
       const params: any = {};
       if (severityFilter !== 'ALL') params.severity = severityFilter;
       const data = await api.getAlerts(params);
       setAlerts(data || []);
+      setLastRefreshed(new Date());
     } catch (err) {
       console.error('Failed to load alerts:', err);
+      setLoadError('Alerts could not be refreshed. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -66,20 +71,35 @@ export default function AlertsPage() {
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button
             onClick={loadAlerts}
+            disabled={loading}
             className="btn btn-outline"
             style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
           >
-            <RefreshCw size={16} /> Refresh Alerts
+            <RefreshCw size={16} className={loading ? 'spin' : undefined} />
+            {loading ? 'Refreshing...' : 'Refresh Alerts'}
           </button>
         </div>
       </div>
+
+      <div aria-live="polite" style={{ minHeight: '1.2rem', marginBottom: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+        {loading
+          ? 'Refreshing alert notifications...'
+          : lastRefreshed
+          ? `Last refreshed ${lastRefreshed.toLocaleTimeString()}`
+          : ''}
+      </div>
+      {loadError && (
+        <div role="alert" style={{ marginBottom: '1rem', color: 'var(--status-critical)' }}>
+          {loadError}
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <div className="card-body" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <Filter size={16} style={{ color: 'var(--text-muted)' }} />
           <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Severity Filter:</span>
-          {['ALL', 'CRITICAL', 'WARNING', 'INFO'].map((sev) => (
+          {['ALL', 'CRITICAL', 'HIGH', 'WARNING'].map((sev) => (
             <button
               key={sev}
               onClick={() => setSeverityFilter(sev)}
@@ -137,7 +157,7 @@ export default function AlertsPage() {
                         </span>
                       </td>
                       <td style={{ fontWeight: 600 }}>{a.title}</td>
-                      <td style={{ fontSize: '0.85rem', maxWidth: '300px' }}>{a.description}</td>
+                      <td style={{ fontSize: '0.85rem', maxWidth: '300px' }}>{a.message}</td>
                       <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                         {a.machine?.name || a.machine_id?.slice(0, 8) || 'Plant Global'}
                       </td>

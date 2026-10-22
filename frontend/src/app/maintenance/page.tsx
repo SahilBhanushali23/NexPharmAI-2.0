@@ -18,13 +18,19 @@ export default function MaintenancePage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
   // Form state
   const [machineId, setMachineId] = useState('');
-  const [workOrderNumber, setWorkOrderNumber] = useState(`WO-${Date.now().toString().slice(-4)}`);
   const [maintenanceType, setMaintenanceType] = useState('PREDICTIVE');
   const [priority, setPriority] = useState('HIGH');
   const [description, setDescription] = useState('Preventive bearing inspection triggered by vibration anomaly.');
+  const [scheduledDate, setScheduledDate] = useState(() => {
+    const date = new Date(Date.now() + 60 * 60 * 1000);
+    date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+    return date.toISOString().slice(0, 16);
+  });
 
   useEffect(() => {
     loadData();
@@ -32,6 +38,7 @@ export default function MaintenancePage() {
 
   async function loadData() {
     setLoading(true);
+    setLoadError('');
     try {
       const [mRes, recRes] = await Promise.allSettled([
         api.getMachines(),
@@ -42,10 +49,20 @@ export default function MaintenancePage() {
         const mList = mRes.value || [];
         setMachines(mList);
         if (mList.length > 0 && !machineId) setMachineId(mList[0].id);
+      } else {
+        console.error('Failed to load machines:', mRes.reason);
       }
       if (recRes.status === 'fulfilled') setRecords(recRes.value || []);
+      else console.error('Failed to load maintenance records:', recRes.reason);
+
+      if (mRes.status === 'rejected' || recRes.status === 'rejected') {
+        setLoadError('Some maintenance data could not be refreshed. Check your connection and try again.');
+      } else {
+        setLastRefreshed(new Date());
+      }
     } catch (err) {
       console.error('Failed to load maintenance records:', err);
+      setLoadError('Maintenance data could not be refreshed. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -53,19 +70,18 @@ export default function MaintenancePage() {
 
   async function handleCreateRecord(e: React.FormEvent) {
     e.preventDefault();
-    if (!machineId || !workOrderNumber) return;
+    if (!machineId || !description.trim() || !scheduledDate) return;
     setCreating(true);
     try {
       await api.createMaintenance({
         machine_id: machineId,
-        work_order_number: workOrderNumber,
         maintenance_type: maintenanceType,
         priority: priority,
-        description: description,
-        status: 'OPEN',
+        reason: description.trim(),
+        scheduled_date: new Date(scheduledDate).toISOString(),
       });
       setShowModal(false);
-      setWorkOrderNumber(`WO-${Date.now().toString().slice(-4)}`);
+      setDescription('');
       await loadData();
     } catch (err: any) {
       alert(`Work order creation failed: ${err.message}`);
@@ -103,12 +119,22 @@ export default function MaintenancePage() {
           </button>
           <button
             onClick={loadData}
+            disabled={loading}
             className="btn btn-outline"
             style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
           >
-            <RefreshCw size={16} /> Refresh
+            <RefreshCw size={16} className={loading ? 'spin' : undefined} />
+            {loading ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
+      </div>
+
+      <div aria-live="polite" style={{ minHeight: '1.2rem', marginBottom: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+        {loading
+          ? 'Refreshing machines and work orders...'
+          : lastRefreshed
+          ? `Last refreshed ${lastRefreshed.toLocaleTimeString()}`
+          : ''}
       </div>
 
       {/* Work Orders List */}
@@ -141,15 +167,15 @@ export default function MaintenancePage() {
               <tbody>
                 {records.map((r) => (
                   <tr key={r.id}>
-                    <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{r.work_order_number}</td>
-                    <td>{r.machine?.name || r.machine_id?.slice(0, 8)}</td>
+                    <td style={{ fontWeight: 600, color: 'var(--primary)' }}>WO-{r.id?.slice(0, 8).toUpperCase()}</td>
+                    <td>{machines.find((machine) => machine.id === r.machine_id)?.name || r.machine_id?.slice(0, 8)}</td>
                     <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{r.maintenance_type}</td>
                     <td>
                       <span className={`badge ${r.priority === 'CRITICAL' || r.priority === 'HIGH' ? 'badge-critical' : 'badge-warning'}`} style={{ fontSize: '0.75rem' }}>
                         {r.priority}
                       </span>
                     </td>
-                    <td style={{ maxWidth: '300px', fontSize: '0.85rem' }}>{r.description}</td>
+                    <td style={{ maxWidth: '300px', fontSize: '0.85rem' }}>{r.reason}</td>
                     <td>
                       <span className={`badge ${r.status === 'COMPLETED' ? 'badge-running' : r.status === 'IN_PROGRESS' ? 'badge-warning' : 'badge-idle'}`} style={{ fontSize: '0.75rem' }}>
                         {r.status}
@@ -157,7 +183,7 @@ export default function MaintenancePage() {
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        {r.status === 'OPEN' && (
+                        {r.status === 'PENDING' && (
                           <button
                             onClick={() => handleUpdateStatus(r.id, 'IN_PROGRESS')}
                             className="btn btn-primary btn-sm"
@@ -185,6 +211,12 @@ export default function MaintenancePage() {
         </div>
       </div>
 
+      {loadError && (
+        <div role="alert" style={{ marginBottom: '1rem', color: 'var(--status-critical)' }}>
+          {loadError}
+        </div>
+      )}
+
       {/* Create Work Order Modal */}
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
@@ -197,18 +229,6 @@ export default function MaintenancePage() {
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
                   <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
-                    Work Order # *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={workOrderNumber}
-                    onChange={(e) => setWorkOrderNumber(e.target.value)}
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
                     Target Machine *
                   </label>
                   <select
@@ -218,10 +238,22 @@ export default function MaintenancePage() {
                   >
                     {machines.map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.machine_code} — {m.name}
+                        {m.machine_code || m.machine_id} — {m.name || m.machine_name}
                       </option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
+                    Scheduled Date & Time *
+                  </label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={scheduledDate}
+                    onChange={(e) => setScheduledDate(e.target.value)}
+                    className="input-field"
+                  />
                 </div>
                 <div>
                   <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>

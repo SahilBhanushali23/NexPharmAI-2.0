@@ -61,3 +61,24 @@ def test_machine_lifecycle(client, auth_headers):
     patch_resp = client.patch(f"/api/v1/machines/{machine_id}", json={"status": "MAINTENANCE"}, headers=auth_headers)
     assert patch_resp.status_code == 200
     assert patch_resp.json()["status"] == "MAINTENANCE"
+
+def test_new_equipment_can_run_failure_prediction_without_readings(client, auth_headers):
+    machine_id = f"M-{uuid.uuid4().hex[:8].upper()}"
+    create_resp = client.post("/api/v1/machines", json={
+        "machine_id": machine_id,
+        "machine_name": "New Tablet Press",
+        "machine_type": "TABLET_PRESS",
+        "production_line": "LINE-1",
+        "location": "Cleanroom A",
+        "status": "RUNNING"
+    }, headers=auth_headers)
+    assert create_resp.status_code == 201
+
+    prediction_resp = client.post(
+        f"/api/v1/predictive-maintenance/machines/{machine_id}/predict",
+        headers=auth_headers
+    )
+
+    assert prediction_resp.status_code == 200
+    assert "prediction" in prediction_resp.json()
+    assert "failure_probability" in prediction_resp.json()["prediction"]

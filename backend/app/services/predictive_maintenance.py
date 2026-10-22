@@ -7,6 +7,11 @@ from app.utils.logger import logger
 
 class PredictiveMaintenanceService:
     @staticmethod
+    def _model_machine_type(machine_type: str) -> str:
+        normalized_type = machine_type.strip().upper()
+        return normalized_type if normalized_type in {"L", "M", "H"} else "M"
+
+    @staticmethod
     def predict(input_data: PMPredictionInput) -> dict:
         loader = model_loader
         if loader.pm_model is None or loader.preprocessor is None:
@@ -22,7 +27,7 @@ class PredictiveMaintenanceService:
         else:
             # Build DataFrame matching feature columns
             df = pd.DataFrame([{
-                "Type": input_data.machine_type.upper(),
+                "Type": PredictiveMaintenanceService._model_machine_type(input_data.machine_type),
                 "Air temperature [K]": float(input_data.air_temperature),
                 "Process temperature [K]": float(input_data.process_temperature),
                 "Rotational speed [rpm]": float(input_data.rotational_speed),

@@ -65,9 +65,9 @@ export default function ProductionPage() {
       dueDate.setDate(dueDate.getDate() + 14);
 
       await api.createOrder({
-        order_number: orderNumber,
+        order_code: orderNumber,
         product_id: productId,
-        target_quantity: Number(targetQuantity),
+        quantity: Number(targetQuantity),
         priority: priority,
         due_date: dueDate.toISOString(),
       });
@@ -147,9 +147,9 @@ export default function ProductionPage() {
               <tbody>
                 {orders.map((o) => (
                   <tr key={o.id}>
-                    <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{o.order_number}</td>
-                    <td>{o.product?.name || o.product_id?.slice(0, 8)}</td>
-                    <td>{o.target_quantity?.toLocaleString()} units</td>
+                    <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{o.order_code}</td>
+                    <td>{products.find((product) => product.id === o.product_id)?.product_name || o.product_id?.slice(0, 8)}</td>
+                    <td>{o.quantity?.toLocaleString()} units</td>
                     <td>
                       <span className={`badge ${o.priority === 'CRITICAL' || o.priority === 'HIGH' ? 'badge-critical' : 'badge-warning'}`} style={{ fontSize: '0.75rem' }}>
                         {o.priority}
@@ -284,7 +284,7 @@ export default function ProductionPage() {
                   >
                     {products.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} ({p.sku}) — {p.dosage_form}
+                        {p.product_name} ({p.description || 'Type not specified'}) - {p.product_code}
                       </option>
                     ))}
                   </select>

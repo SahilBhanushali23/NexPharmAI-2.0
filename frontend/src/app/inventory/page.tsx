@@ -18,7 +18,7 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [adjustModal, setAdjustModal] = useState<any>(null);
   const [adjustQty, setAdjustQty] = useState(100);
-  const [adjustType, setAdjustType] = useState('RECEIPT');
+  const [adjustType, setAdjustType] = useState('RECEIVE');
   const [adjustNotes, setAdjustNotes] = useState('Supplier delivery stock replenishment');
   const [adjusting, setAdjusting] = useState(false);
 
@@ -44,7 +44,11 @@ export default function InventoryPage() {
     setAdjusting(true);
     try {
       await api.adjustStock(adjustModal.id, {
-        quantity: Number(adjustQty),
+        quantity_delta: adjustType === 'CONSUME' || adjustType === 'SCRAP'
+          ? -Math.abs(Number(adjustQty))
+          : adjustType === 'RECEIVE'
+          ? Math.abs(Number(adjustQty))
+          : Number(adjustQty),
         transaction_type: adjustType,
         notes: adjustNotes,
       });
@@ -57,7 +61,7 @@ export default function InventoryPage() {
     }
   }
 
-  const lowStockMaterials = materials.filter((m) => m.current_stock <= m.reorder_point);
+  const lowStockMaterials = materials.filter((m) => m.quantity <= m.reorder_level);
 
   return (
     <div>
@@ -140,17 +144,17 @@ export default function InventoryPage() {
               </thead>
               <tbody>
                 {materials.map((m) => {
-                  const isLow = m.current_stock <= m.reorder_point;
+                  const isLow = m.quantity <= m.reorder_level;
                   return (
                     <tr key={m.id}>
                       <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{m.material_code}</td>
-                      <td>{m.name}</td>
+                      <td>{m.material_name}</td>
                       <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{m.category}</td>
                       <td style={{ fontWeight: 700 }}>
-                        {m.current_stock?.toLocaleString()} {m.unit_of_measure}
+                        {m.quantity?.toLocaleString()} {m.unit}
                       </td>
                       <td style={{ color: 'var(--text-muted)' }}>
-                        {m.reorder_point?.toLocaleString()} {m.unit_of_measure}
+                        {m.reorder_level?.toLocaleString()} {m.unit}
                       </td>
                       <td>
                         <span className={`badge ${isLow ? 'badge-critical' : 'badge-running'}`} style={{ fontSize: '0.75rem' }}>
@@ -183,7 +187,7 @@ export default function InventoryPage() {
         <div className="modal-overlay" onClick={() => setAdjustModal(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
             <div className="modal-header">
-              <div className="modal-title">Adjust Stock: {adjustModal.name}</div>
+              <div className="modal-title">Adjust Stock: {adjustModal.material_name}</div>
               <button onClick={() => setAdjustModal(null)} className="btn btn-outline btn-sm">✕</button>
             </div>
             <form onSubmit={handleAdjustStock}>
@@ -197,15 +201,15 @@ export default function InventoryPage() {
                     onChange={(e) => setAdjustType(e.target.value)}
                     className="input-field"
                   >
-                    <option value="RECEIPT">Stock In / Receipt (+)</option>
-                    <option value="CONSUMPTION">Production Consumption (-)</option>
+                    <option value="RECEIVE">Stock In / Receipt (+)</option>
+                    <option value="CONSUME">Production Consumption (-)</option>
                     <option value="SCRAP">Scrap / QC Rejection (-)</option>
-                    <option value="AUDIT">Inventory Audit Delta</option>
+                    <option value="ADJUST">Inventory Audit Delta (+/-)</option>
                   </select>
                 </div>
                 <div>
                   <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
-                    Quantity ({adjustModal.unit_of_measure})
+                    Quantity ({adjustModal.unit})
                   </label>
                   <input
                     type="number"
