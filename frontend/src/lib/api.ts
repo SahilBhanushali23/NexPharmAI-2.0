@@ -1,6 +1,8 @@
+
 import { SystemHealth } from '@/types';
 
-const API_BASE_URL = "/api";
+const API_BASE_URL = '';
+
 export class ApiClientError extends Error {
   statusCode: number;
   data: unknown;
@@ -39,7 +41,10 @@ class ApiClient {
     }
   }
 
-  async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
     const url = `${this.baseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
     const token = this.getToken();
 
@@ -59,29 +64,48 @@ class ApiClient {
         headers,
       });
 
-      if (!response.ok) {
-        let errorData: any = null;
-        try {
-          errorData = await response.json();
-        } catch {
-          errorData = { detail: await response.text() };
-        }
+      // Read the response body only once.
+      const responseText = await response.text();
 
-        const message = errorData?.detail || errorData?.message || `HTTP error ${response.status}`;
-        
+      let responseData: any = null;
+
+      if (responseText) {
+        try {
+          responseData = JSON.parse(responseText);
+        } catch {
+          responseData = { detail: responseText };
+        }
+      }
+
+      if (!response.ok) {
+        const message =
+          responseData?.detail ||
+          responseData?.message ||
+          `HTTP error ${response.status}`;
+
         if (response.status === 401 && typeof window !== 'undefined') {
           this.clearToken();
         }
 
-        throw new ApiClientError(message, response.status, errorData);
+        throw new ApiClientError(
+          message,
+          response.status,
+          responseData
+        );
       }
 
-      return (await response.json()) as T;
-    } catch (error: any) {
+      return responseData as T;
+    } catch (error: unknown) {
       if (error instanceof ApiClientError) {
         throw error;
       }
-      throw new ApiClientError(error?.message || 'Network error occurred', 0);
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Network error occurred';
+
+      throw new ApiClientError(message, 0);
     }
   }
 
@@ -90,15 +114,17 @@ class ApiClient {
     return this.request<SystemHealth>('/api/v1/health');
   }
 
-  // Auth
+  // Authentication
   async login(credentials: { email: string; password: string }): Promise<any> {
     const res = await this.request<any>('/api/v1/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
+
     if (res?.access_token) {
       this.setToken(res.access_token);
     }
+
     return res;
   }
 
@@ -145,7 +171,10 @@ class ApiClient {
     });
   }
 
-  async getMachineReadings(machineId: string, limit: number = 30): Promise<any[]> {
+  async getMachineReadings(
+    machineId: string,
+    limit: number = 30
+  ): Promise<any[]> {
     return this.request(`/api/v1/readings/${machineId}?limit=${limit}`);
   }
 
@@ -158,9 +187,10 @@ class ApiClient {
   }
 
   async runMachinePrediction(machineId: string): Promise<any> {
-    return this.request(`/api/v1/predictive-maintenance/machines/${machineId}/predict`, {
-      method: 'POST',
-    });
+    return this.request(
+      `/api/v1/predictive-maintenance/machines/${machineId}/predict`,
+      { method: 'POST' }
+    );
   }
 
   // Anomaly Detection
@@ -172,9 +202,10 @@ class ApiClient {
   }
 
   async runMachineAnomalyCheck(machineId: string): Promise<any> {
-    return this.request(`/api/v1/anomaly-detection/machines/${machineId}/anomaly-check`, {
-      method: 'POST',
-    });
+    return this.request(
+      `/api/v1/anomaly-detection/machines/${machineId}/anomaly-check`,
+      { method: 'POST' }
+    );
   }
 
   async getAnomalyHistory(machineId: string): Promise<any[]> {
@@ -200,7 +231,9 @@ class ApiClient {
   }
 
   // Maintenance
-  async getMaintenanceRecords(params: Record<string, any> = {}): Promise<any[]> {
+  async getMaintenanceRecords(
+    params: Record<string, any> = {}
+  ): Promise<any[]> {
     const qs = new URLSearchParams(params).toString();
     return this.request(`/api/v1/maintenance${qs ? `?${qs}` : ''}`);
   }
@@ -269,13 +302,16 @@ class ApiClient {
   }
 
   async updateBatchStatus(batchId: string, status: string): Promise<any> {
-    return this.request(`/api/v1/production/batches/${batchId}/status?status_str=${status}`, {
-      method: 'PATCH',
-    });
+    return this.request(
+      `/api/v1/production/batches/${batchId}/status?status_str=${encodeURIComponent(status)}`,
+      { method: 'PATCH' }
+    );
   }
 
   // Scheduler
-  async generateSchedule(data: { horizon_days: number } = { horizon_days: 7 }): Promise<any> {
+  async generateSchedule(
+    data: { horizon_days: number } = { horizon_days: 7 }
+  ): Promise<any> {
     return this.request('/api/v1/scheduler/generate', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -290,7 +326,9 @@ class ApiClient {
     return this.request('/api/v1/scheduler/revisions');
   }
 
-  async triggerReschedule(data: { machine_id: string; trigger_reason?: string }): Promise<any> {
+  async triggerReschedule(
+    data: { machine_id: string; trigger_reason?: string }
+  ): Promise<any> {
     return this.request('/api/v1/scheduler/reschedule', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -306,11 +344,15 @@ class ApiClient {
   }
 
   async getQualityHistory(batchId?: string): Promise<any[]> {
-    return this.request(`/api/v1/quality/history${batchId ? `?batch_id=${batchId}` : ''}`);
+    return this.request(
+      `/api/v1/quality/history${batchId ? `?batch_id=${encodeURIComponent(batchId)}` : ''}`
+    );
   }
 
   // Forecasting
-  async generateForecast(data: { product_id: string; horizon_days: number }): Promise<any> {
+  async generateForecast(
+    data: { product_id: string; horizon_days: number }
+  ): Promise<any> {
     return this.request('/api/v1/forecasting/generate', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -326,8 +368,15 @@ class ApiClient {
     return this.request(`/api/v1/analytics/oee/machines/${machineId}`);
   }
 
-  // Assistant
-  async queryAssistant(query: string): Promise<{ query: string; answer: string; data_context: any; timestamp: string }> {
+  // AI Assistant
+  async queryAssistant(
+    query: string
+  ): Promise<{
+    query: string;
+    answer: string;
+    data_context: any;
+    timestamp: string;
+  }> {
     return this.request('/api/v1/assistant/query', {
       method: 'POST',
       body: JSON.stringify({ query }),
